@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import matplotlib
 import torch
@@ -20,6 +21,9 @@ import os
 from PIL import Image
 
 STD_SIZE = 120
+OULU_DATABASE_PATH = '/mnt/hdd.user/datasets/FAS/Oulu-NPU'
+SMALL_OULU_DATABASE_PATH = '/workspace/Face-Anti-Spoofing-Neural-Network/SMALLOULU'
+SUBDIRS = {"train": "Train_files", "test": "Test_files", "dev": "Dev_files"}
 
 def resize_depth(imgdepth):
     img=np.array(imgdepth)
@@ -39,60 +43,14 @@ if __name__ == '__main__':
     parser.add_argument('--paf_size', default=3, type=int, help='PAF feature kernel size')
     args = parser.parse_args()
 
-    folder = {}
-    indice = 0
-
-    for phone in range(1,6):
-        for session in range(1,4):
-            for user in range(1,21):
-                for file in range(1,6):
-                    nom= str(user)
-                    if user<10:
-                        nom = '0'+nom
-                    currentFrame=0
-                    while(currentFrame<5):
-                        name = '/Volumes/G-DRIVE mobile USB/Train_files_OULU/Train_files/'+str(phone)+'_'+str(session)+'_'+nom+'_'+str(file)+'_'+str(currentFrame)+'.png'
-                        folder[str(indice)]=name
-
-                        currentFrame += 1
-                        indice += 1
-
-    for phone in range(1,6):
-        for session in range(1,4):
-            for user in range(21,36):
-                for file in range(1,6):
-                    nom= str(user)
-                    if user<10:
-                        nom = '0'+nom
-                    currentFrame=0
-                    while(currentFrame<5):
-                        name = '/Volumes/G-DRIVE mobile USB/dev_files/Dev_files/'+str(phone)+'_'+str(session)+'_'+nom+'_'+str(file)+'_'+str(currentFrame)+'.png'
-                        folder[str(indice)]=name
-
-                        currentFrame += 1
-                        indice += 1
-
-    for phone in range(1,6):
-        for session in range(1,4):
-            for user in range(36,56):
-                for file in range(1,6):
-                    nom= str(user)
-                    if user<10:
-                        nom = '0'+nom
-                    currentFrame=0
-                    while(currentFrame<5):
-                        name = '/Volumes/G-DRIVE mobile USB/Test_files_OULU/Test_files/'+str(phone)+'_'+str(session)+'_'+nom+'_'+str(file)+'_'+str(currentFrame)+'.png'
-                        folder[str(indice)]=name
-
-                        currentFrame += 1
-                        indice += 1
+    folder = np.load('/workspace/Face-Anti-Spoofing-Neural-Network/data_processing/folder_small2.npz')
     
-    label = np.load('/Users/hugues/Documents/deep_learning_project/3DDFA-master/label.npz')
+    label = np.load('/workspace/Face-Anti-Spoofing-Neural-Network/data_processing/label_small2.npz')
 
     Anchors = {}
     Labels_D = {}
     
-    # 1. Enregistrement des modèles pré-entraînés
+    # 1. 保存预训练模型
     checkpoint_fp = 'models/phase1_wpdc_vdc.pth.tar'
     arch = 'mobilenet_1'
 
@@ -108,15 +66,18 @@ if __name__ == '__main__':
         model = model.cuda()
     model.eval()
 
-    # 2. Fonction de détection des visages
+    # 2. 人脸检测功能
     face_detector = dlib.get_frontal_face_detector()
 
-    # 3. Détection
+    # 3. 检测
     tri = sio.loadmat('visualize/tri.mat')['tri']
     transform = transforms.Compose([ToTensorGjz(), NormalizeGjz(mean=127.5, std=128)])
 
     for item in folder:
-        img_ori = cv2.imread(folder[item])
+        # print(type(str(folder[item])))
+        src_path = str(folder[item])
+        print("pic: {}, label: {}".format(src_path, label[item]))
+        img_ori = cv2.imread(src_path)
         rects = face_detector(img_ori, 1)
         if len(rects) != 0:
         
@@ -139,11 +100,14 @@ if __name__ == '__main__':
             Anchor = gen_anchor(param=param,kernel_size=args.paf_size)
             Anchors[item]=Anchor
             
+            depth_path = src_path[:-4] + "_depth.png"
             depths_img = cget_depths_image(img_ori, vertices_lst, tri - 1) 
             if(int(item)%100==0):
                 print(item)
             if label[item]==1: #real face
+                print(depth_path)
                 Labels_D[item]=resize_depth(depths_img)
+                cv2.imwrite(depth_path, depths_img)
             else: #spoof face
                 Labels_D[item]=np.zeros((32,32,1),dtype=float)
         else:
@@ -154,4 +118,4 @@ if __name__ == '__main__':
                     
     np.savez("anchors.npz",**Anchors)
     np.savez("labels_D.npz",**Labels_D)
-    np.savez("folder.npz",**folder)
+    np.savez("folder_dp2.npz",**folder)
